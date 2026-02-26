@@ -1,20 +1,30 @@
 # Study Notes API
-A simple background API built with
+
+A backend API built with:
 - Node.js
-- express
+- Express
 - TypeScript
 - MongoDB
 - Mongoose
-- JWT authentication
+- JWT Authentication (Access + Refresh Tokens)
+
 ## Features
 - Register
 - Login
+- Logout
+- Token Refresh
+- Secure Cookie-based Authentication
+
+## Authentication Flow
+- Access token expires in 15 minutes
+- Refresh token expires in 7 days
+- Refresh tokens are stored in database
+- On logout, refresh tokens are deleted
+
 ## Installation
-1. Clone project
-2. Install Repository
+1. Clone the repository
+2. Install dependencies
+   npm install
 3. Create .env file
-- PORT=5000
-- MONGO_URL=your_mongodb_connection_string
-- JWT_SECRET=your_secret
-4. Run Project
-- npm run dev
+4. Run project
+   npm run dev

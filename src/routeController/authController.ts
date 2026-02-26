@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
 import User from "../dataModels/userModel.js";
+import Token from "../dataModels/tokenModel.js";
 import bcrypt from "bcrypt";
-import { generateToken } from "../utils/generateToken.js";
+import { generateRefreshToken, generateAccessToken } from "../utils/generateToken.js";
+import jwt from "jsonwebtoken"
 export const register = async (req: Request, res: Response) => {
   try {
     const { username, email, password } = req.body;
@@ -28,12 +30,16 @@ export const register = async (req: Request, res: Response) => {
       password: hashPassword,
     });
     await newUser.save();
-    const token = generateToken(newUser._id.toString());
+   generateAccessToken(newUser._id.toString(), res);
+ const refreshToken=  generateRefreshToken(newUser._id.toString(), res);
+   await Token.create({
+    user: newUser._id,
+    refreshToken
+   })
     return res.status(201).json({
       _id: newUser._id,
       username: newUser.username,
       email: newUser.email,
-      token
     });
   } catch (error) {
     return res.status(500).json({msg: "internal server error"});
@@ -49,15 +55,61 @@ export const login = async (req: Request, res: Response) => {
     if (!user) return res.status(401).json({ msg: "Invalid credentials" });
     const checkPassword = await bcrypt.compare(password, user.password);
     if (!checkPassword) return res.status(401).json({msg: "invalid credentials"});
-    const token = generateToken(user._id.toString())
+    generateAccessToken(user._id.toString(), res);
+   const refreshToken= generateRefreshToken(user._id.toString(), res);
+   await Token.deleteMany({ user: user._id });
+    //save refresh Token
+    await Token.create({
+     user: user._id,
+     refreshToken
+    })
     return res.status(200).json({
       _id: user._id,
-      username: normalizedEmail,
+      username: user.username,
       email: user.email,
-      token,
     });
     
   } catch (error) {
     return res.status(500).json("internal server error");
   }
 };
+export const logout = async(req:Request, res: Response)=> {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    if(refreshToken){
+      await Token.deleteOne({refreshToken})
+    }
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+   res.clearCookie("refreshToken", {
+     httpOnly: true,
+     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+     secure: process.env.NODE_ENV === "production",
+   });
+    return res.status(200).json({msg: "Logout successfully"})
+  } catch (error) {
+     return res.status(500).json({msg: "Internal server error"});
+  }
+}
+export const refreshTokenController = async(req:Request, res:Response)=>{
+  const token = req.cookies.refreshToken;
+ if(!token) return res.sendStatus(401);
+ try {
+  const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET!) as {userId: string};
+   //check token in database
+   const existingToken = await Token.findOne({
+    user: decoded.userId,
+    refreshToken:token
+   })
+   if(!existingToken) return res.sendStatus(403);
+   generateAccessToken(decoded.userId, res);
+   return res.sendStatus(200);
+  }
+  
+  catch (error) {
+  return res.status(500).json({msg: "internal server error"});
+ }
+}
