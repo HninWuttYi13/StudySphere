@@ -4,20 +4,18 @@ import Token from "../dataModels/tokenModel.js";
 import bcrypt from "bcrypt";
 import { generateRefreshToken, generateAccessToken } from "../utils/generateToken.js";
 import jwt from "jsonwebtoken"
+import { loginSchema, registerSchema } from "../validations/auth.validations.js";
+import { env } from "../validations/env.js";
 export const register = async (req: Request, res: Response) => {
   try {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) {
-      return res.status(400).json({msg: "please fill all requirements"});
-    }
-    if (password.length < 6) {
-      return res.status(400).json({msg: "Password must be at least 6 characters"});
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({msg: "Invalid email. Please try"});
-    }
-    const normalizedEmail = email.toLowerCase();
+   const parsed = registerSchema.safeParse(req.body);
+  if(!parsed.success){
+    return res.status(400).json({
+      errors: parsed.error.flatten().fieldErrors,
+    })
+   }
+    const  {username, email, password} = parsed.data;
+  const  normalizedEmail = email.toLowerCase();
     const existEmail = await User.findOne({ email: normalizedEmail });
     if (existEmail)
       return res
@@ -42,13 +40,17 @@ export const register = async (req: Request, res: Response) => {
       email: newUser.email,
     });
   } catch (error) {
-    return res.status(500).json({msg: "internal server error"});
+    return res.status(500).json({msg: "Internal server error"})
   }
 };
 export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  if (!email || !password)
-    return res.status(400).json({msg: "email or password required"});
+   const parsed = loginSchema.safeParse(req.body);
+   if(!parsed.success){
+    return res.status(400).json({
+      errors: parsed.error.flatten().fieldErrors
+    })
+   }
+   const {email, password} = parsed.data;
   try {
     const normalizedEmail = email.toLowerCase();
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
@@ -70,7 +72,7 @@ export const login = async (req: Request, res: Response) => {
     });
     
   } catch (error) {
-    return res.status(500).json("internal server error");
+    return res.status(500).json({msg: "IInternal server error"});
   }
 };
 export const logout = async(req:Request, res: Response)=> {
@@ -81,13 +83,13 @@ export const logout = async(req:Request, res: Response)=> {
     }
     res.clearCookie("accessToken", {
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      secure: process.env.NODE_ENV === "production",
+      sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+      secure: env.NODE_ENV === "production",
     });
    res.clearCookie("refreshToken", {
      httpOnly: true,
-     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-     secure: process.env.NODE_ENV === "production",
+     sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+     secure: env.NODE_ENV === "production",
    });
     return res.status(200).json({msg: "Logout successfully"})
   } catch (error) {
@@ -98,7 +100,7 @@ export const refreshTokenController = async(req:Request, res:Response)=>{
   const token = req.cookies.refreshToken;
  if(!token) return res.sendStatus(401);
  try {
-  const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET!) as {userId: string};
+  const decoded = jwt.verify(token, env.REFRESH_TOKEN_SECRET) as {userId: string};
    //check token in database
    const existingToken = await Token.findOne({
     user: decoded.userId,
